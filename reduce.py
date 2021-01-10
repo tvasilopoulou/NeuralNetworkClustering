@@ -53,7 +53,7 @@ def decoder(conv, layers, maxFilters, convFiltSize, dx, dy):
 	return decoded
  
  
-def autoencoderBottleneck(dataset, queryset, outputDataset, outputQueryset, layers, maxFilters, x, y, convFiltSize, batchSize, epochs, latentDim):
+def autoencoderBottleneck(dataset, queryset, layers, maxFilters, x, y, convFiltSize, batchSize, epochs, latentDim):
 	images = []
 	with open(dataset, "rb") as f:
 		#read metadata from file
@@ -67,7 +67,7 @@ def autoencoderBottleneck(dataset, queryset, outputDataset, outputQueryset, laye
 		buf = f.read(dimensions * numOfImages)
 		images = np.frombuffer(buf, dtype=np.uint8).astype(np.float32)
 		images = images.reshape(numOfImages, dx, dy)
-	
+		f.close()
 	# create shape of input for the model
 	inChannel = 1
 	inputImage = Input(shape = (dx, dy, inChannel))
@@ -77,8 +77,10 @@ def autoencoderBottleneck(dataset, queryset, outputDataset, outputQueryset, laye
 	outShape = encode.shape
 	flatLayer = Flatten()(encode)
 	flatShape = flatLayer.shape 
-	denseLayer = Dense(10, activation = "relu")(flatLayer)
+	denseLayer = Dense(latentDim, activation = "relu")(flatLayer)
 
+	print(flatShape)
+	print(outShape)
 
 	outputLayer = Dense(flatShape[1], activation = "softmax")(denseLayer)
 	outputLayer = Reshape((outShape[1], outShape[2], outShape[3]))(outputLayer)
@@ -94,20 +96,56 @@ def autoencoderBottleneck(dataset, queryset, outputDataset, outputQueryset, laye
 	xValid = np.array(xValid).astype('float32') 
 	groundValid = np.array(groundValid).astype('float32') 
 	
-
- 	# train the model for the given amount of batches/epochs
-	autoencoder_train = autoencoder.fit(xTrain, groundTrain, \
-	 batch_size=batchSize,epochs=epochs,verbose=1,validation_data=(xValid, groundValid))
+	# print(np.concatenate((xTrain, xValid), axis=0).shape)
 
 	# https://www.kite.com/python/answers/how-to-get-the-output-of-each-layer-of-a-keras-model-in-python
 	autoencoder_train = autoencoder.fit(xTrain, groundTrain, \
                                         batch_size=batchSize,epochs=epochs,verbose=1,validation_data=(xValid, groundValid))
+
+	# autoencoder.save("./autoencoderModel.h5")
+
+	with open(queryset, "rb") as f:
+		#read metadata from file
+		magicNum = int.from_bytes(f.read(4), byteorder = "big")
+		numOfImages = int.from_bytes(f.read(4), byteorder = "big")
+		dx = int.from_bytes(f.read(4), byteorder = "big")
+		dy = int.from_bytes(f.read(4), byteorder = "big")
+		
+		#read images from file
+		dimensions = dx*dy
+		buf = f.read(dimensions * numOfImages)
+		images = np.frombuffer(buf, dtype=np.uint8).astype(np.float32)
+		images = images.reshape(numOfImages, dx, dy)
+		f.close()
+
+	xQuery, xQValid, groundTrain, groundValid  = train_test_split(images, images, test_size=0.2, random_state=13)
+	xQuery = np.array(xQuery).astype('float32') 
+	groundTrain = np.array(groundTrain).astype('float32') 
+	xQValid = np.array(xQValid).astype('float32') 
+	groundValid = np.array(groundValid).astype('float32') 
+
+	autoencoder_train = autoencoder.fit(xQuery, groundTrain, \
+                                        batch_size=batchSize,epochs=epochs,verbose=1,validation_data=(xQValid, groundValid))
+
+	autoencoder.save("./autoencoderModel.h5")
+
+	return [0, np.concatenate((xTrain, xValid), axis=0), np.concatenate((xQuery, xQValid), axis=0)]
+
+
+def reduce(outputDataset, outputQueryset, latentDim, xTrain, xQuery):
+	autoencoder = keras.models.load_model("./autoencoderModel.h5")
+
+
 	latentVector = None
 	for layer in autoencoder.layers:
-		if layer.output_shape == (None, 10):
+		if layer.output_shape == (None, latentDim):
 			# print(layer)
 			latentVector = layer
+
 	coordinates = (K.function([autoencoder.input], [latentVector.output])(xTrain)[0]).astype(np.ushort)
+	qCoordinates = (K.function([autoencoder.input], [latentVector.output])(xQuery)[0]).astype(np.ushort)
+
+	
 	f = open(outputDataset, "ab")
 
 	entry = 2051
@@ -122,17 +160,25 @@ def autoencoderBottleneck(dataset, queryset, outputDataset, outputQueryset, laye
 		for k in range(0, len(coordinates[0])):
 			entry = struct.pack('>H', coordinates[index][k])
 			f.write(entry)
-	# for i in range(0, len(coordinates)):
-	# # 	# print(coordinates[i], file = f)
-	# 	entry = array('d', coordinates[i])
-	# 	entry.tofile(f)
-	# 	break
+
 	f.close()
 
+	f = open(outputQueryset, "ab")
 
+	entry = 2051
+	f.write(entry.to_bytes(4, byteorder='big'))
+	entry = len(qCoordinates)
+	f.write(entry.to_bytes(4, byteorder='big'))
+	entry = 1
+	f.write(entry.to_bytes(4, byteorder='big'))
+	entry = latentDim
+	f.write(entry.to_bytes(4, byteorder='big'))
+	for index in range(0, len(qCoordinates)):
+		for k in range(0, len(qCoordinates[0])):
+			entry = struct.pack('>H', qCoordinates[index][k])
+			f.write(entry)
 
-	return 0
-
+	f.close()
 
 
 
@@ -174,4 +220,5 @@ if __name__ == "__main__":
 				print("Okay let's try again.")
 				continue
 
-		flag = autoencoderBottleneck(sys.argv[2], sys.argv[4], sys.argv[6], sys.argv[8], layers, maxFilters, x, y, convFiltSize, batchSize, epochs, latentDim)
+		flag, xTrain, xQuery = autoencoderBottleneck(sys.argv[2], sys.argv[4], layers, maxFilters, x, y, convFiltSize, batchSize, epochs, latentDim)
+		reduce(sys.argv[6], sys.argv[8], latentDim, xTrain, xQuery)
