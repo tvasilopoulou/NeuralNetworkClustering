@@ -7,7 +7,7 @@
 #include "classes.hpp"
 #include "clustering_functions.hpp"
 
-//./cluster –d <input file original space> -i <input file new space> -n <classes from NN as clusters file> –c <configuration file> -o <output file>
+/*./cluster -i train-images.idx3-ubyte -c cluster.conf -o output.txt -complete -m Classic */
 
 using namespace std;
 
@@ -20,24 +20,15 @@ int main(int argc, char * argv[]){
 		return -1;
 	}
 
-	char * originalInputFile, * newInputFile, * clustersFile, * configFile, * outputFile;
+	char * inputFile, * configFile, * outputFile, * method;
+	int complete = 0, flag = 0;
 
 	for (i = 1; i < argc; i++)
 	{
-		if (strcmp(argv[i], "-d") == 0)
+		if (strcmp(argv[i], "-i") == 0)
 		{
-			originalInputFile = (char *)malloc(sizeof(argv[i+1] + 1)); 
-			strcpy(originalInputFile, argv[i+1]);
-		}
-		else if (strcmp(argv[i], "-i") == 0)
-		{
-			newInputFile = (char *)malloc(sizeof(argv[i+1] + 1)); 
-			strcpy(newInputFile, argv[i+1]);
-		}
-		else if (strcmp(argv[i], "-n") == 0)
-		{
-			clustersFile = (char *)malloc(sizeof(argv[i+1] + 1)); 
-			strcpy(clustersFile, argv[i+1]);
+			inputFile=(char *)malloc(sizeof(argv[i+1] + 1)); 
+			strcpy(inputFile, argv[i+1]);
 		}
 		else if (strcmp(argv[i], "-c") == 0)
 		{
@@ -49,17 +40,32 @@ int main(int argc, char * argv[]){
 			outputFile = (char *)malloc(sizeof(argv[i+1] + 1)); 
 			strcpy(outputFile, argv[i+1]);
 		}
-
-		
+		else if (strcmp(argv[i], "-complete") == 0)
+		{
+			complete = 1;
+		}
+		else if (strcmp(argv[i], "-m") == 0)
+		{
+			if ((strcmp(argv[i+1], "Classic") == 0) || (strcmp(argv[i+1], "LSH") == 0) || (strcmp(argv[i+1], "Hypercube") == 0))
+			{
+				method = (char *)malloc(sizeof(argv[i+1] + 1)); 
+				strcpy(method, argv[i+1]);
+				}
+			else
+			{
+				cout << ("Please try running ./cluster again. Invalid method has been chosen.\n");
+				return -1;
+			}
+		}
 		
 	}
 
-	cout << originalInputFile << " " << newInputFile << " " << clustersFile << " " << configFile << " " << outputFile << endl;
+	cout << inputFile << " " << configFile << " " << outputFile << " " << complete << " " << method << endl;
 
     /////////////////////////////////////////////////////////////////////////////
 	
 	// read cluster configuration file and get the values included
-	int K, L, k, lineConuter = 0;
+	int K, L, k, M, kHypercube, probes, lineConuter = 0;
 	
 	ifstream configF(configFile, ios::in);
 
@@ -90,14 +96,22 @@ int main(int argc, char * argv[]){
 			case 3: 
 				k = atoi(token);
 				break;
+			case 4:
+				M = atoi(token);
+				break;
+			case 5:
+				kHypercube = atoi(token);
+				break;
+			case 6:
+				probes = atoi(token);
+				break;
 			default:
 				break;
 		}
 
     }
-
     configF.close();
-    cout << K << " " << L << " " << k << " " << endl;
+    cout << K << " " << L << " " << k << " " << M << " " << kHypercube << " " << probes << endl;
     /////////////////////////////////////////////////////////////////////////////
 	
 	// read the first 4 line of input file to retireve metadata
@@ -140,9 +154,11 @@ int main(int argc, char * argv[]){
 	uint8_t * buffer;
 	i = 0;
 	
+	ofstream outputF(outputFile, ios::out);
+  	outputF << "Algorithm: " << method << endl;
 
 	// read input file to retrieve images
-	while (i != numOfImages)
+	while (i!=numOfImages)
 	{
 		buffer = new uint8_t[dimensions];					
 		inputF.read((char*)buffer, dimensions);	
@@ -154,70 +170,23 @@ int main(int argc, char * argv[]){
 	inputF.close();
     /////////////////////////////////////////////////////////////////////////////
 
-	// read the first 4 bytes to retrieve metadata
-	int magicNum1, numOfImages1, dx1, dy1;
-
-	ifstream newInputF(newInputFile, ios::in | ios::binary);
-
-	for(i = 0; i < 4; i++){
-		uint8_t buffer[4] = {0};
-		newInputF.read((char*)buffer, sizeof(buffer));
-		unsigned int result = buffer[0];
-		result = (result << 8) | buffer[1];
-		result = (result << 8) | buffer[2];
-		result = (result << 8) | buffer[3];
-		switch(i){
-			case 0:
-				magicNum1 = result;
-				break;
-			case 1:
-				numOfImages1 = result;
-				break;
-			case 2: 
-				dx1 = result;
-				break;
-			case 3:
-				dy1 = result;
-				break;
-			default:
-				break;
-		} 
-	}
-	//end of metadata retireval
-	/*----------------------------------------------------------------------------------------------------------------------------------*/
-	printf("%d %d %d %d\n", magicNum1, numOfImages1, dx1, dy1);
-
-	int dimensions1 = dx1*dy1;
-	
-	vector <uint8_t *> newImagesVector;
-	uint8_t * newBuffer;
-	
-	// read the input file to get images
-	for(i = 0; i < numOfImages1; i++){
-		newBuffer = new uint8_t[dimensions1];
-		newInputF.read((char *)newBuffer, dimensions1);
-		newImagesVector.push_back(newBuffer);
-	}
-	newInputF.close();
-
 	// run kmeans++ initialization
 	vector <Image*> initalCentroids = kMeansInitialization(imagesVector, L, K, numOfImages, dimensions);
-
-	ofstream outputF(outputFile, ios::out);
-	// use the initial centroids produced by kmeans++ for Lloyd's algorithm
-	vector<Cluster*> clusterSet = LloydsAlgorithm(imagesVector, initalCentroids, numOfImages);
-
+	vector<Cluster *> clusterSet;
+	if ((strcmp(method, "Classic") == 0))
+		// use the initial centroids produced by kmeans++ for Lloyd's algorithm
+		clusterSet = LloydsAlgorithm(imagesVector, initalCentroids, numOfImages);
+	else if ((strcmp(method, "LSH") == 0))
+		reverseAssignmentLSH(initalCentroids, imagesVector, L, k);
+	else if ((strcmp(method, "Hypercube") == 0))
+		reverseAssignmentCube(initalCentroids, imagesVector, M, kHypercube, probes);
+	
 	// vector<double> si = Silhouette(clusterSet, imagesVector);
 	vector<double> si = {0.0};
 
-	// PrintResults(outputFileq2qF, clusterSet, si, imagesVector, complete);
+	PrintResults(outputF, clusterSet, si, imagesVector, complete);
 
-	vector <Image *> centroidsReverse = initalCentroids;
-	reverseAssignmentLSH(initalCentroids, imagesVector, L, k);
-	initalCentroids = centroidsReverse;
-	// reverseAssignmentCube(initalCentroids, imagesVector, M, kHypercube, probes);
 	outputF.close();
-
 	// clear vectors, free variables and return
 	initalCentroids.clear();
 	// updatedCentroids.clear();
