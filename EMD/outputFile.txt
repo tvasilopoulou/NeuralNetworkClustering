@@ -1,0 +1,8 @@
+Average Correct Search Results EMD: 4.1
+Average Time Elapsed in EMD Neighbor Search : 7.374412941932678
+Average Correct Search Results MANHATTAN: 4.7
+Average Time Elapsed in MANHATTAN Neighbor Search : 0.9471118450164795
+Average Correct Search Results EMD: 4.9
+Average Time Elapsed in EMD Neighbor Search : 31.8348078250885
+Average Correct Search Results MANHATTAN: 4.7
+Average Time Elapsed in MANHATTAN Neighbor Search : 1.2230174541473389
