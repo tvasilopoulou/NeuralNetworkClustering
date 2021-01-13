@@ -294,6 +294,8 @@ int main(int argc, char * argv[]){
 	// close opened files
 	queryF.close();
 	newQueryF.close();
+	
+	outputF << endl;
 
 	outputF << "tReduced: " << durationReduced << "ms" << endl;
 	outputF << "tLSH: " << durationLSH <<  "ms" << endl;
@@ -303,7 +305,6 @@ int main(int argc, char * argv[]){
 	double af1 = 0.0;
 	double af2 = 0.0;
 
-	outputF << endl;
 
 	double meanLSH, meanNN, meanTrue;
 	meanLSH = (double)((double)sumOfDistancesLSH/(double)numOfImages);
