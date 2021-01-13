@@ -8,7 +8,8 @@ using namespace std;
 // function to calculate manhattan distance
 int manhattanDistance(uint8_t * tempImage, uint8_t * qImage, int size){
 	int distance = 0;
-	for (int i=0; i<size; i++){
+	for (int i=0; i<size; i++)
+	{
 		distance += abs(qImage[i] - tempImage[i]);
 	}
 	return distance;
@@ -20,11 +21,14 @@ bool operator<(Values & x, Values & y){
 
 
 /*brute force calculations*/
-vector <int> CalculateDistances(uint8_t * qImage, int dimensions, vector <uint8_t *> imageVector, int * pos){
+int CalculateDistances(uint8_t * qImage, int dimensions, vector <uint8_t *> imageVector, int * pos){
 	vector <int> distances;
 	for(auto &image : imageVector)
 	{
-		if(qImage !=image ) distances.push_back(manhattanDistance(qImage, image, dimensions));
+		if(qImage != image) 
+		{
+			distances.push_back(manhattanDistance(qImage, image, dimensions));
+		}
 	}
 
 	// find the index of the minimum
@@ -37,8 +41,9 @@ vector <int> CalculateDistances(uint8_t * qImage, int dimensions, vector <uint8_
 			*pos = i;
 		}
 	}
-	
-	return distances;
+
+	// sort(distances.begin(),distances.end());
+	return min;
 }
 
 /*geeks4geeks*/
@@ -59,3 +64,4 @@ int exists(Values * neighbors, int id , int size){
 	}
 	return -1;
 }
+
